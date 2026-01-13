@@ -1,0 +1,33 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": "${command:pickArgs}"
+        },
+        {
+            "name": "kicad_purge",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "kicad_purge.main",
+            "console": "integratedTerminal",
+            // "cwd": "/media/maerki/shared/octohub4/kicad/octohub4_v0.1",
+            "cwd": "/home/maerki/work_itooth/itooth_PCB/itooth_pogo84/kicad_usb",
+            "justMyCode": false
+        },
+    ]
+}

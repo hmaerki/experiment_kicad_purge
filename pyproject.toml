@@ -4,4 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+license = "MIT"
+dependencies = [
+    "kicad-tools>=0.9.3",
+    "requests>=2.32.5",
+]
+
+[project.scripts]
+kicad_purge = "kicad_purge.main:main"
