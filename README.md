@@ -1,76 +1,39 @@
-# Kicad purge
+# kicad purge
 
-## Use case: Name, data&time
+## User Manual
 
-For every revision, some files have to be updated (v2.3.4, 2025-05-12).
+Given: <folder>/<filename>.kicad_pro
 
-The required locations are found automatically and updated.
+-> .kicad_sch, .kicad_pcb
 
-## Use case: New project rename
+### Kicad project files
 
-A new project is started by 'git cloing' and old one and not 'new project rename':
-
-* Find files with the old name: 'old_name.kicad_pro'
-* Create git commands: 'git mv old_name.kicad_pro new_name.kicad_pro'
-* Find and update references in files.
-
-## Use case: purge
-
-While developing a pcb, often variants of symobls and footprints are stored in the project files.
-
-purge will:
-
-* Find all unreferenced symbols and footprints and remove them.
-
-## Implementation: Fileformats/Parsers
-
-* lisp style
-  * fp-lib-table
-  * 00_project_library.kicad_sym
-  * SOT-23.kicad_mod
-  * pcb_octoprobe.kicad_pcb
-  * pcb_octoprobe.kicad_pcb
-
-* json
-  * pcb_octoprobe.kicad_pro
+<folder>/fp-lib-table
   
-### Libraries
+  * `(lib (name "00_project_library")(type "KiCad")(uri "${KIPRJMOD}/00_project_library.pretty")`
 
-* https://github.com/jd-boyd/sexpdata
-  * Nice pytest workflow on many python versions
-  * Very limited documentation
-  * Too flat directory structure
-  * https://sexpdata.readthedocs.io/en/latest/index.html
-  * Extens use of `**kwds`
+<folder>/sym-lib-table
 
-* https://github.com/psychogenic/kicad-skip
-  * Many features
-  * No code formatting
-  * No typehints on return types
-  * Probably not static type checking
-  * Depends on sexpdata
+  * `(lib (name "00_project_library")(type "KiCad")(uri "${KIPRJMOD}/00_project_library.kicad_sym")`
 
-* https://github.com/PySpice-org/kicad-rw
-  * Depends on sexpdata
-  * Example of reading schemas, crete netlist
+<filename>.kicad_sch: Starting with kicad_sch find hierarchical .kicad_sch.
 
-* https://github.com/mvnmgrx/kiutils https://kiutils.readthedocs.io
-  * Very nice first impression
-  * https://kiutils.readthedocs.io/en/latest/usage/examples.html#changing-title-and-revision-in-schematic
-  * Very sexy parser: https://github.com/mvnmgrx/kiutils/blob/master/src/kiutils/utils/sexpr.py
-  * Very detailed on file attributes, for example footprint model pad: https://github.com/mvnmgrx/kiutils/blob/master/src/kiutils/footprint.py#L354
+<folder>.glob("*.kidac_sym"): Symbol files
 
-* https://github.com/vmalat/kipe
-  * This file does too many things at one time: https://github.com/vmalat/kipe/blob/main/kipe.py
-  * Supports en and cz. Why?
+<folder>.glob("*.pretty"): Footprint files
 
-* https://github.com/dvc94ch/pykicad
-  * Abandoned?
+### Models
 
-* https://github.com/realthunder/sexp_parser
-* https://github.com/realthunder/kicad_parser
-  * Solve on thing at the time: The parser!
+* `(model "${KIPRJMOD}/00_project_parts/KF235-2P/KF235-2P.step"`
 
-## Technical challanges
+### Symbols
 
-* Does the library reformat the file? This is unwanted as a diff tool should only display the changes.
+In all .kicad_sch find
+
+  * `(symbol "00_project_library:TPS259474LRPWR"`
+  * `(property "Footprint" "00_project_library:TPS259474LRPWR"`
+
+In .kicad_pcb find
+
+  * `(footprint "00_project_library:octohub4_mounting_hole"`
+
