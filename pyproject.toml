@@ -1,12 +1,12 @@
 [project]
 name = "experiment-kicad-purge"
-version = "0.1.0"
+version = "0.1.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
-    "kicad-tools>=0.9.3",
+    "kicad-tools>=0.10.2",
     "requests>=2.32.5",
 ]
 

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from kicad_tools.sexp.parser import SExp, parse_sexp
-from kicad_tools import load_schematic, load_pcb, Schematic
-from kicad_tools.core import load_symbol_lib
-
 import dataclasses
 import pathlib
 import logging
+
+from kicad_tools.sexp.parser import SExp, parse_sexp
+from kicad_tools import Schematic
 
 logger = logging.getLogger(__file__)
 
@@ -15,14 +14,29 @@ LIBRARY_DELIMITER = ":"
 
 @dataclasses.dataclass(repr=True)
 class Purgable:
+    """
+    filename_implementation is None: If somebody references this Symbol/Footprint.
+    filename_implementation is not None: If somebody creates this Symbol/Footprint. In this case, 'descr' is the filename where the Symbol/Footprint has to be purged.
+    referenced: If the Symbol/Footprint has been references by somebody. In other word: Is in use.
+    not referenced: If the Symbol/Footprint has not been references by anybody. In other word: May be purged.
+    """
+
     id: str
-    descr: str | None = None
+    filename_implementation: pathlib.Path | None = None
     referenced: bool = False
+
+    def __post_init__(self) -> None:
+        assert isinstance(self.id, str)
+        assert isinstance(self.filename_implementation, pathlib.Path | None)
+        assert isinstance(self.referenced, bool)
 
 
 class Purgables(dict[str, Purgable]):
-    def add(self, id: str, descr: str | None = None) -> None:
-        referenced = descr is None
+    def add(self, id: str, filename_implementation: pathlib.Path | None = None) -> None:
+        assert isinstance(id, str)
+        assert isinstance(filename_implementation, pathlib.Path | None)
+
+        referenced = filename_implementation is None
         purgable = self.get(id, None)
         if purgable is None:
             purgable = Purgable(id=id)
@@ -30,20 +44,29 @@ class Purgables(dict[str, Purgable]):
 
         if referenced:
             purgable.referenced = True
-        if descr is not None:
-            if purgable.descr is not None:
+        if filename_implementation is not None:
+            if purgable.filename_implementation is not None:
                 logger.debug(
-                    f"Footprint '{purgable.id}' with desc='{purgable.descr}': overwrite with '{descr}'"
+                    f"Footprint '{purgable.id}' with desc='{purgable.filename_implementation}': overwrite with '{filename_implementation}'"
                 )
-            purgable.descr = descr
+            purgable.filename_implementation = filename_implementation
 
-    def print(self, title: str) -> None:
+    def print_purgable(self, context: Context, title: str) -> None:
+        assert isinstance(context, Context)
+        assert isinstance(title, str)
+
         logger.info(f"**** {title}")
-        for id in sorted(self):
+        for id in sorted(self, key=str.lower):
             purgable = self[id]
+            logger.debug(
+                f"   {int(purgable.referenced)}: {purgable.filename_implementation} ({purgable.id})"
+            )
             log = logger.debug if purgable.referenced else logger.info
             # log(f"   {purgable!r}")
-            log(f"   {purgable.descr} ({purgable.id})")
+            assert purgable.filename_implementation is not None
+            log(
+                f"   {purgable.filename_implementation.relative_to(context.directory)} ({purgable.id})"
+            )
 
 
 @dataclasses.dataclass(frozen=True, repr=True)
@@ -88,37 +111,45 @@ class FileSExp:
 
 @dataclasses.dataclass(frozen=True, repr=True)
 class FileSymbolTable:
+    lib_name: str
     sexp: FileSExp
 
     @classmethod
-    def factory(cls, filename: pathlib.Path) -> FileSymbolTable:
-        return FileSymbolTable(sexp=FileSExp.factory(filename=filename))
+    def factory(cls, lib_name: str, filename: pathlib.Path) -> FileSymbolTable:
+        return FileSymbolTable(
+            lib_name=lib_name, sexp=FileSExp.factory(filename=filename)
+        )
 
     def handle_symbols(self, context: Context) -> None:
-        logger.info(f"*** Processing {self.sexp.filename.relative_to(context.directory)}")
+        logger.info(
+            f"*** Processing {self.sexp.filename.relative_to(context.directory)}"
+        )
         for value in self.sexp.sexp.values:
-            if value.name == "symbol":
-                symbol_name = value.values[0]
-                symbol_name_full = (
-                    f"{self.sexp.filename.stem}{LIBRARY_DELIMITER}{symbol_name}"
-                )
-                logging.debug(symbol_name_full)
-                context.purgable_symbols.add(
-                    id=symbol_name_full,
-                    descr=self.sexp.filename.name,
-                )
-                # if symbol_name_full == "00_project_library:AMS1117-3.3":
-                for child in value.children:
-                    if child.name == "property":
-                        child_value = child.values[0]
-                        if child_value == "Footprint":
-                            footprint_name = child.values[1]
-                            if LIBRARY_DELIMITER in footprint_name:
-                                if context.libraries_footprint.startswith(
-                                    footprint_name
-                                ):
-                                    logging.debug(footprint_name)
-                                    context.purgable_footprints.add(id=footprint_name)
+            if value.name != "symbol":
+                continue
+            symbol_name = value.values[0]
+            # if symbol_name == "Conn_01x03_MountingPin":
+            #     print("Conn_01x03_MountingPin")
+            symbol_name_full = self.lib_name + LIBRARY_DELIMITER + symbol_name
+            logging.debug(symbol_name_full)
+            context.purgable_symbols.add(
+                id=symbol_name_full,
+                filename_implementation=self.sexp.filename,
+            )
+            # if symbol_name_full == "00_project_library:AMS1117-3.3":
+            for child in value.children:
+                if child.name != "property":
+                    continue
+                child_value = child.values[0]
+                if child_value != "Footprint":
+                    continue
+                footprint_name = child.values[1]
+                if LIBRARY_DELIMITER not in footprint_name:
+                    continue
+                if not context.libraries_footprint.startswith(footprint_name):
+                    continue
+                logging.debug(footprint_name)
+                context.purgable_footprints.add(id=footprint_name)
 
 
 class SexpProps(dict[str, str]):
@@ -153,11 +184,12 @@ class LibPretty:
         path_prefix = "${KIPRJMOD}/"
         if lib_path.startswith(path_prefix):
             lib_directory = lib_path[len(path_prefix) :]
-            logger.debug("PRETTY", lib_name, lib_directory)
+            logger.debug(" ".join(("PRETTY", lib_name, lib_directory)))
             _lib_directory = context.directory / lib_directory
             if not _lib_directory.is_dir():
-                logger.warning(f"{filename_xy.relative_to(context.directory)}: References non existing library: {lib_directory}")
-                return
+                logger.warning(
+                    f"{filename_xy.relative_to(context.directory)}: References non existing library: {lib_directory}"
+                )
             context.libraries_footprint.add(lib_name, _lib_directory)
 
 
@@ -174,10 +206,10 @@ class LibSym:
         path_prefix = "${KIPRJMOD}/"
         if lib_path.startswith(path_prefix):
             lib_path = lib_path[len(path_prefix) :]
-            logger.debug("SYMBOL", lib_name, lib_path)
+            logger.debug(" ".join(("SYMBOL", lib_name, lib_path)))
             filename = context.directory / lib_path
             assert filename.exists()
-            fst = FileSymbolTable.factory(filename=filename)
+            fst = FileSymbolTable.factory(lib_name=lib_name, filename=filename)
             fst.handle_symbols(context=context)
             context.libraries_sym.add(lib_name, filename)
 
@@ -191,13 +223,16 @@ class FileKicadPcb:
         return FileKicadPcb(sexp=FileSExp.factory(filename=filename_pcb))
 
     def process_pcb(self, context: Context) -> None:
-        logger.info(f"*** Processing {self.sexp.filename.relative_to(context.directory)}")
+        logger.info(
+            f"*** Processing {self.sexp.filename.relative_to(context.directory)}"
+        )
         for value in self.sexp.sexp.values:
             if value.name == "footprint":
                 footprint_name = value.values[0]
                 if context.libraries_footprint.startswith(footprint_name):
                     context.purgable_footprints.add(
-                        id=footprint_name, descr=self.sexp.filename.name
+                        id=footprint_name,
+                        filename_implementation=self.sexp.filename,
                     )
 
 
@@ -210,19 +245,28 @@ class FileKicadSch:
         return FileKicadSch(sexp=FileSExp.factory(filename=filename_sch))
 
     def process_schematic(self, context: Context) -> None:
-        logger.info(f"*** Processing {self.sexp.filename.relative_to(context.directory)}")
+        logger.info(
+            f"*** Processing {self.sexp.filename.relative_to(context.directory)}"
+        )
+        logger.info(f"*** Processing {self.sexp.filename}")
         sch = Schematic(self.sexp.sexp)
 
-        for symbol in sch.symbols:
-            symbol_name: str = symbol._sexp.values[0]
-            # Example 'symbol_name': "00_project_library:+5Vdut"
+        # return self._sexp.find("lib_symbols")
+        # items = [SymbolInstance.from_sexp(s) for s in self._sexp.find_children("symbol")]
+        for symbol in sch.sexp.find_all("symbol"):
+            symbol_name = symbol.get_string(0)
             if isinstance(symbol_name, str):
+                # Example 'symbol_name': "00_project_library:+5Vdut"
                 if context.libraries_sym.startswith(symbol_name):
                     context.purgable_symbols.add(id=symbol_name)
 
-            footprint_name = symbol.footprint
-            if context.libraries_footprint.startswith(footprint_name):
-                context.purgable_footprints.add(id=footprint_name)
+            for property in symbol.find_all("property"):
+                property_name = property.get_string(0)
+                if property_name == "Footprint":
+                    footprint_name = property.get_string(1)
+                    if isinstance(footprint_name, str):
+                        if context.libraries_footprint.startswith(footprint_name):
+                            context.purgable_footprints.add(id=footprint_name)
 
         # Access hierarchy
         logger.debug("SHEETS")
@@ -252,13 +296,17 @@ class FileLibTable:
         return list_props
 
     def handle_lib_pretty(self, context: Context) -> None:
-        logger.info(f"*** Processing {self.sexp.filename.relative_to(context.directory)}")
+        logger.info(
+            f"*** Processing {self.sexp.filename.relative_to(context.directory)}"
+        )
         for lib in self.libs:
             lib_pretty = LibPretty(lib)
             lib_pretty.find_footprints(context=context, filename_xy=self.sexp.filename)
 
     def handle_lib_sym(self, context: Context) -> None:
-        logger.info(f"*** Processing {self.sexp.filename.relative_to(context.directory)}")
+        logger.info(
+            f"*** Processing {self.sexp.filename.relative_to(context.directory)}"
+        )
         for lib in self.libs:
             lib_pretty = LibSym(lib)
             lib_pretty.find_symbols(context=context)
@@ -279,7 +327,7 @@ class Context:
     )
 
     def __post_init__(self) -> None:
-        pass
+        assert isinstance(self.directory, pathlib.Path)
 
     def collect(self) -> None:
         lib_table = FileLibTable.factory(self.directory / "fp-lib-table")
@@ -289,10 +337,8 @@ class Context:
 
         for filename_proj in self.directory.glob("*.kicad_pro"):
             logger.info(f"*** Processing {filename_proj.name}")
-            filename_sch=filename_proj.with_suffix(".kicad_sch")
-            kicad_sch = FileKicadSch.factory(
-                filename_sch=filename_sch
-            )
+            filename_sch = filename_proj.with_suffix(".kicad_sch")
+            kicad_sch = FileKicadSch.factory(filename_sch=filename_sch)
             kicad_sch.process_schematic(context=self)
 
             kicad_pcb = FileKicadPcb.factory(
@@ -306,19 +352,36 @@ class Context:
         def subprint(tag: str, libs: dict[str, pathlib.Path]) -> None:
             logger.info(f"*** {tag}")
             for lib in sorted(libs):
-                relative = libs[lib].relative_to(self.directory)
-                logger.info(f"      {lib}: {relative}")
+                error = ""
+                directory_relative = libs[lib].relative_to(self.directory)
+                if not directory_relative.exists():
+                    error = f" WARNING: directory does not exist! {directory_relative}"
+                logger.info(f"      {lib}: {directory_relative}{error}")
 
         subprint("Libraries footprint", self.libraries_footprint)
         subprint("Libraries symbol", self.libraries_sym)
 
-    def print(self) -> None:
-        self.purgable_symbols.print("Symbols to be purged")
-        self.purgable_footprints.print("Footprints to be purged")
+    def print_purgable_symbols(self) -> None:
+        self.purgable_symbols.print_purgable(
+            self, "Symbols to be purged (Start KiCad and open 'Symbol Editor')"
+        )
+
+    def print_purgable_footprints(self) -> None:
+        self.purgable_footprints.print_purgable(
+            self, "Footprints to be purged (Open file explorer and delete the files)"
+        )
 
     def _process_libraries_footprint(self) -> None:
         for lib_name, lib_dir in self.libraries_footprint.items():
-            assert lib_dir.is_dir(), lib_dir
+            if not lib_dir.is_dir():
+                logger.debug(
+                    f"{lib_dir.relative_to(self.directory)}: footprint library directory for '{lib_name}' does not exist"
+                )
+                continue
+
             for filename_footprint in lib_dir.glob("*.kicad_mod"):
                 id = f"{lib_name}{LIBRARY_DELIMITER}{filename_footprint.stem}"
-                self.purgable_footprints.add(id=id, descr=str(filename_footprint.relative_to(self.directory)))
+                self.purgable_footprints.add(
+                    id=id,
+                    filename_implementation=filename_footprint,
+                )
