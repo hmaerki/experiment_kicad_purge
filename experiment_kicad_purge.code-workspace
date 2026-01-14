@@ -5,7 +5,8 @@
 		},
 		{
 			"name": "octohub4",
-			"path": "/media/maerki/shared/octohub4/kicad/octohub4_v0.1"
+			"path": "/home/maerki/work_octoprobe/octohub4/kicad/octohub4_v0.1",
+			// "path": "/home/maerki/work_itooth/itooth_PCB/itooth_pogo84/kicad_usb",
 		}
 	],
 	"settings": {}

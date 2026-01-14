@@ -17,7 +17,8 @@ def main():
     context = util_context.Context(directory=pathlib.Path.cwd())
     context.collect()
     context.print_libraries()
-    context.print()
+    context.print_purgable_symbols()
+    context.print_purgable_footprints()
 
 
 if __name__ == "__main__":
