@@ -1,5 +1,7 @@
-rem Double click this file and it will loop over all .csv file in this directory
-rem to generated png diagrams
+# Run kicad_purge on current directory
+#
+# NO files will be changed.
+# All purging has to be manually!
 
 uv run --with=git+https://github.com/hmaerki/experiment_kicad_purge@main kicad_purge
 
