@@ -25,7 +25,8 @@
             "request": "launch",
             "module": "kicad_purge.main",
             "console": "integratedTerminal",
-            "cwd": "/home/maerki/work_octoprobe/octohub4/kicad/octohub4_v0.1",
+            "cwd": "/home/maerki/work_octoprobe/tentacle/kicad/tentacle_v0.6",
+            // "cwd": "/home/maerki/work_octoprobe/octohub4/kicad/octohub4_v0.1",
             // "cwd": "/media/maerki/shared/octohub4/kicad/octohub4_v0.1",
             // "cwd": "/home/maerki/work_itooth/itooth_PCB/itooth_pogo84/kicad_usb",
             "justMyCode": false

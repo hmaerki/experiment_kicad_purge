@@ -63,7 +63,9 @@ class Purgables(dict[str, Purgable]):
             )
             log = logger.debug if purgable.referenced else logger.info
             # log(f"   {purgable!r}")
-            assert purgable.filename_implementation is not None
+            if purgable.filename_implementation is None:
+                logger.warning(f"   Footprint '{purgable.id}' is referenced somewhere but has not been implemented. Clean up the simbols first and this error might go away!")
+                continue
             log(
                 f"   {purgable.filename_implementation.relative_to(context.directory)} ({purgable.id})"
             )
