@@ -6,7 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
-    "kicad-tools>=0.10.2",
+    # "kicad-tools>=0.10.2",
+    "git+https://github.com/rjwalters/kicad-tools@main",
     "requests>=2.32.5",
 ]
 
